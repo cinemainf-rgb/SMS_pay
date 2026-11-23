@@ -24,19 +24,18 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # 1. إنشاء فولدر الأندرويد (لأنك مش منزله في الريبو)
       - name: Generate Android Files
         run: flutter create --platforms=android --org com.fazlaka.pay .
 
-      - name: Patch Native Android Files
+      # 2. إصلاح البصمة (بدون أي تعديل على الكوتلن)
+      - name: Fix Native Android Files for Biometrics
         run: |
-          # 1. إجبار إصدار الكوتلن على 1.9.0 عشان السيرفر ميدربش
-          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.0'/" android/build.gradle
-          
-          # 2. تعديل MainActivity عشان البصمة
+          # البحث عن MainActivity في أي مكان وتعديله
           find android -name "MainActivity.kt" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           find android -name "MainActivity.java" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           
-          # 3. إضافة صلاحية البصمة في المانيفست
+          # البحث عن المانيفست وإضافة الصلاحية
           MANIFEST_PATH=$(find android -name "AndroidManifest.xml" | head -n 1)
           if [ -n "$MANIFEST_PATH" ]; then
             if ! grep -q "USE_BIOMETRIC" "$MANIFEST_PATH"; then
