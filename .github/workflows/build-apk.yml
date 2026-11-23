@@ -16,15 +16,17 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.32.0'
           channel: 'stable'
           java-version: '17'
       - name: Rebuild android folder on v2
         run: |
           rm -rf android
           flutter create . --platforms=android --org com.fazlaka --project-name fazlaka_pay
-          echo "--- MainActivity found at: ---"
-          find android -name "MainActivity.kt"
+          # حدّث Kotlin لـ 2.0.0 - ده اللي بيحل غلطة الصورة
+          sed -i 's/org.jetbrains.kotlin.android" version "[^"]*"/org.jetbrains.kotlin.android" version "2.0.0"/g' android/settings.gradle || true
+          sed -i 's/kotlin_version = .*/kotlin_version = "2.0.0"/g' android/build.gradle || true
+          grep -r "kotlin" android/settings.gradle || true
       - name: Put fingerprint MainActivity
         run: |
           FILE=$(find android -name "MainActivity.kt" | head -n 1)
@@ -55,11 +57,9 @@ jobs:
               }
           }
           EOF
-          # صلح اسم الباكدج تلقائي حسب مكان الملف
           DIR=$(dirname "$FILE")
           PKG=$(echo "$DIR" | sed 's|.*kotlin/||' | tr '/' '.')
           sed -i "s/package .*/package $PKG/" "$FILE"
-          cat "$FILE"
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
