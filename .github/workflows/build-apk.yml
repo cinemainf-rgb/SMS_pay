@@ -23,19 +23,28 @@ jobs:
         run: |
           rm -rf android
           flutter create . --platforms=android --org com.fazlaka --project-name fazlaka_pay
-          # حدّث Kotlin لـ 2.0.0 - ده اللي بيحل غلطة الصورة
           sed -i 's/org.jetbrains.kotlin.android" version "[^"]*"/org.jetbrains.kotlin.android" version "2.0.0"/g' android/settings.gradle || true
-          sed -i 's/kotlin_version = .*/kotlin_version = "2.0.0"/g' android/build.gradle || true
-          grep -r "kotlin" android/settings.gradle || true
-      - name: Put fingerprint MainActivity
+      - name: Add androidx biometric
+        run: |
+          # زود مكتبة البصمة الجديدة في build.gradle
+          grep -q "biometric" android/app/build.gradle || echo '    implementation "androidx.biometric:biometric:1.2.0-alpha05"' >> /tmp/bio.txt
+          # هنحطها جوه dependencies
+          python3 -c "
+          import pathlib
+          p = pathlib.Path('android/app/build.gradle')
+          t = p.read_text()
+          if 'biometric' not in t:
+              t = t.replace('dependencies {', 'dependencies {\n    implementation \"androidx.biometric:biometric:1.2.0-alpha05\"', 1)
+              p.write_text(t)
+          print(p.read_text())
+          "
+      - name: Put fingerprint MainActivity androidx
         run: |
           FILE=$(find android -name "MainActivity.kt" | head -n 1)
-          echo "Writing to $FILE"
           cat > "$FILE" << 'EOF'
           package com.fazlaka.fazlaka_pay
-          import android.hardware.biometrics.BiometricPrompt
-          import android.os.Build
-          import android.os.CancellationSignal
+          import androidx.biometric.BiometricPrompt
+          import androidx.core.content.ContextCompat
           import io.flutter.embedding.android.FlutterActivity
           import io.flutter.embedding.engine.FlutterEngine
           import io.flutter.plugin.common.MethodChannel
@@ -48,18 +57,25 @@ jobs:
                   }
               }
               private fun authenticate(result: MethodChannel.Result) {
-                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) { result.success(false); return }
-                  val prompt = BiometricPrompt.Builder(this).setTitle("Fazlaka Pay").setSubtitle("حط صباعك عشان تفتح فزلكة").setNegativeButton("إلغاء", mainExecutor) { _, _ -> result.success(false) }.build()
-                  prompt.authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-                      override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult?) { result.success(true) }
-                      override fun onAuthenticationError(code: Int, msg: CharSequence?) { result.success(false) }
+                  val executor = ContextCompat.getMainExecutor(this)
+                  val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
+                      override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) { result.success(true) }
+                      override fun onAuthenticationError(code: Int, msg: CharSequence) { result.success(false) }
+                      override fun onAuthenticationFailed() { result.success(false) }
                   })
+                  val info = BiometricPrompt.PromptInfo.Builder()
+                      .setTitle("Fazlaka Pay")
+                      .setSubtitle("حط صباعك عشان تفتح فزلكة")
+                      .setNegativeButtonText("إلغاء")
+                      .build()
+                  prompt.authenticate(info)
               }
           }
           EOF
           DIR=$(dirname "$FILE")
           PKG=$(echo "$DIR" | sed 's|.*kotlin/||' | tr '/' '.')
           sed -i "s/package .*/package $PKG/" "$FILE"
+          cat "$FILE"
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
