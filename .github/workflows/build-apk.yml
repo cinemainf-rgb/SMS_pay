@@ -18,7 +18,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # هنا السر: إجبار جيت هب على استخدام فلاتر إصدار 3.19.6 المستقر
       - name: Set up Flutter (Stable Version)
         uses: subosito/flutter-action@v2
         with:
@@ -26,8 +25,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # السطر ده هو اللي اتحل بيه المشكلة: إجبار اسم المشروع على fazlaka_pay
       - name: Generate Android Files
-        run: flutter create --platforms=android --org com.fazlaka.pay .
+        run: flutter create --platforms=android --org com.fazlaka.pay --project-name fazlaka_pay .
 
       - name: Fix Native Android Files for Biometrics
         run: |
