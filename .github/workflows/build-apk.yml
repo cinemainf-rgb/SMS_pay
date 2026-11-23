@@ -18,29 +18,27 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Flutter
+      # هنا السر: إجبار جيت هب على استخدام فلاتر إصدار 3.19.6 المستقر
+      - name: Set up Flutter (Stable Version)
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.19.6'
           channel: 'stable'
           cache: true
 
-      # 1. إنشاء فولدر الأندرويد (لأنك مش منزله في الريبو)
       - name: Generate Android Files
         run: flutter create --platforms=android --org com.fazlaka.pay .
 
-      # 2. إصلاح البصمة (بدون أي تعديل على الكوتلن)
       - name: Fix Native Android Files for Biometrics
         run: |
-          # البحث عن MainActivity في أي مكان وتعديله
+          # تعديل MainActivity
           find android -name "MainActivity.kt" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           find android -name "MainActivity.java" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           
-          # البحث عن المانيفست وإضافة الصلاحية
+          # إضافة صلاحية البصمة
           MANIFEST_PATH=$(find android -name "AndroidManifest.xml" | head -n 1)
-          if [ -n "$MANIFEST_PATH" ]; then
-            if ! grep -q "USE_BIOMETRIC" "$MANIFEST_PATH"; then
-              sed -i '/<application/i \    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' "$MANIFEST_PATH"
-            fi
+          if [ -n "$MANIFEST_PATH" ] && ! grep -q "USE_BIOMETRIC" "$MANIFEST_PATH"; then
+            sed -i '/<application/i \    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' "$MANIFEST_PATH"
           fi
 
       - name: Install dependencies
