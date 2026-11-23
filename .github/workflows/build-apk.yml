@@ -2,83 +2,57 @@ name: Build Fazlaka Pay APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.0'
           channel: 'stable'
-          java-version: '17'
-      - name: Rebuild android folder on v2
+          cache: true
+
+      - name: Generate Android Files
+        run: flutter create --platforms=android --org com.fazlaka.pay .
+
+      - name: Patch Native Android Files
         run: |
-          rm -rf android
-          flutter create . --platforms=android --org com.fazlaka --project-name fazlaka_pay
-          sed -i 's/org.jetbrains.kotlin.android" version "[^"]*"/org.jetbrains.kotlin.android" version "2.0.0"/g' android/settings.gradle || true
-      - name: Add androidx biometric
-        run: |
-          # زود مكتبة البصمة الجديدة في build.gradle
-          grep -q "biometric" android/app/build.gradle || echo '    implementation "androidx.biometric:biometric:1.2.0-alpha05"' >> /tmp/bio.txt
-          # هنحطها جوه dependencies
-          python3 -c "
-          import pathlib
-          p = pathlib.Path('android/app/build.gradle')
-          t = p.read_text()
-          if 'biometric' not in t:
-              t = t.replace('dependencies {', 'dependencies {\n    implementation \"androidx.biometric:biometric:1.2.0-alpha05\"', 1)
-              p.write_text(t)
-          print(p.read_text())
-          "
-      - name: Put fingerprint MainActivity androidx
-        run: |
-          FILE=$(find android -name "MainActivity.kt" | head -n 1)
-          cat > "$FILE" << 'EOF'
-          package com.fazlaka.fazlaka_pay
-          import androidx.biometric.BiometricPrompt
-          import androidx.core.content.ContextCompat
-          import io.flutter.embedding.android.FlutterActivity
-          import io.flutter.embedding.engine.FlutterEngine
-          import io.flutter.plugin.common.MethodChannel
-          class MainActivity : FlutterActivity() {
-              private val CHANNEL = "fazlaka/biometric"
-              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-                  super.configureFlutterEngine(flutterEngine)
-                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
-                      if (call.method == "authenticate") { authenticate(result) } else { result.notImplemented() }
-                  }
-              }
-              private fun authenticate(result: MethodChannel.Result) {
-                  val executor = ContextCompat.getMainExecutor(this)
-                  val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
-                      override fun onAuthenticationSucceeded(r: BiometricPrompt.AuthenticationResult) { result.success(true) }
-                      override fun onAuthenticationError(code: Int, msg: CharSequence) { result.success(false) }
-                      override fun onAuthenticationFailed() { result.success(false) }
-                  })
-                  val info = BiometricPrompt.PromptInfo.Builder()
-                      .setTitle("Fazlaka Pay")
-                      .setSubtitle("حط صباعك عشان تفتح فزلكة")
-                      .setNegativeButtonText("إلغاء")
-                      .build()
-                  prompt.authenticate(info)
-              }
-          }
-          EOF
-          DIR=$(dirname "$FILE")
-          PKG=$(echo "$DIR" | sed 's|.*kotlin/||' | tr '/' '.')
-          sed -i "s/package .*/package $PKG/" "$FILE"
-          cat "$FILE"
-      - run: flutter pub get
-      - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+          # 1. إجبار إصدار الكوتلن على 1.9.0 عشان السيرفر ميدربش
+          sed -i "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.0'/" android/build.gradle
+          
+          # 2. تعديل MainActivity عشان البصمة
+          find android -name "MainActivity.kt" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
+          find android -name "MainActivity.java" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
+          
+          # 3. إضافة صلاحية البصمة في المانيفست
+          MANIFEST_PATH=$(find android -name "AndroidManifest.xml" | head -n 1)
+          if [ -n "$MANIFEST_PATH" ]; then
+            if ! grep -q "USE_BIOMETRIC" "$MANIFEST_PATH"; then
+              sed -i '/<application/i \    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' "$MANIFEST_PATH"
+            fi
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: fazlaka-pay-apk
+          name: fazlaka-pay-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
