@@ -18,7 +18,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # 1. استخدام إصدار فلاتر حديث يحل مشكلة الـ Dart SDK
+      # 1. استخدام إصدار فلاتر متوافق مع Dart 3.5
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -26,23 +26,23 @@ jobs:
           channel: 'stable'
           cache: true
 
-      # 2. إنشاء الملفات (مع تحديد اسم المشروع عشان مشكلة الاسم الكبير)
+      # 2. إنشاء الملفات
       - name: Generate Android Files
         run: flutter create --platforms=android --org com.fazlaka.pay --project-name fazlaka_pay .
 
-      # 3. تعديل الملفات (بحرص شديد)
+      # 3. تعديل الملفات للبصمة والكوتلن
       - name: Patch Native Android Files
         run: |
-          # أ. إجبار إصدار الكوتلن على 1.9.0 (بس في ملف الأندرويد الرئيسي)
+          # إجبار الكوتلن على 1.9.0
           if [ -f "android/build.gradle" ]; then
             sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.0"/' android/build.gradle
           fi
           
-          # ب. تعديل MainActivity للبصمة
+          # تعديل MainActivity
           find android -name "MainActivity.kt" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           find android -name "MainActivity.java" -exec sed -i 's/FlutterActivity/FlutterFragmentActivity/g' {} +
           
-          # ج. إضافة صلاحية البصمة
+          # إضافة صلاحية البصمة
           MANIFEST_PATH=$(find android -name "AndroidManifest.xml" | head -n 1)
           if [ -n "$MANIFEST_PATH" ] && ! grep -q "USE_BIOMETRIC" "$MANIFEST_PATH"; then
             sed -i '/<application/i \    <uses-permission android:name="android.permission.USE_BIOMETRIC" />' "$MANIFEST_PATH"
